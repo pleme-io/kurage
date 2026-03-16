@@ -34,19 +34,30 @@ impl Default for KurageConfig {
 
 impl KurageConfig {
     pub fn load() -> Self {
+        // Priority:
+        // 1. KURAGE_CONFIG env (set by Nix HM module for MCP server context)
+        // 2. XDG_CONFIG_HOME/kurage/kurage.yaml
+        // 3. ~/.config/kurage/kurage.yaml
+        // 4. Defaults
+
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
 
-        // Try XDG_CONFIG_HOME first, then ~/.config
-        let candidates = [
+        let candidates: Vec<PathBuf> = [
+            // Nix module sets this for MCP server processes that lack user env
+            std::env::var("KURAGE_CONFIG").map(PathBuf::from).ok(),
             std::env::var("XDG_CONFIG_HOME")
                 .map(|x| PathBuf::from(x).join("kurage/kurage.yaml"))
                 .ok(),
             Some(PathBuf::from(&home).join(".config/kurage/kurage.yaml")),
-        ];
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
 
-        for candidate in candidates.into_iter().flatten() {
+        for candidate in &candidates {
             if candidate.exists() {
-                if let Ok(content) = std::fs::read_to_string(&candidate) {
+                if let Ok(content) = std::fs::read_to_string(candidate) {
+                    // serde_yaml_ng parses both YAML and JSON (YAML is a superset)
                     match serde_yaml_ng::from_str::<Self>(&content) {
                         Ok(config) => return config,
                         Err(e) => {

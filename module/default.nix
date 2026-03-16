@@ -5,17 +5,21 @@
 # Namespace: services.kurage.*
 #
 # Provides:
-#   - MCP server entry (consumed by anvil/claude modules for all AI agents)
+#   - MCP server entry (consumed by claude/anvil for all AI agents)
 #   - CLI binary in PATH
-#   - Optional config file generation (~/.config/kurage/kurage.yaml)
+#   - Config file generation (~/.config/kurage/kurage.yaml)
+#   - Env propagation: CURSOR_API_KEY passed to MCP server process
+#
+# Two integration paths (use one or both):
+#   1. Service-level: services.kurage.mcp.enable + claude.mcp.kurage.enable
+#      → Claude reads config.services.kurage.mcp.serverEntry
+#   2. Anvil-level: define kurage in anvil.mcp.servers with envFiles
+#      → All agents (Cursor, Claude, OpenCode) get kurage
 #
 # Usage:
 #   services.kurage.enable = true;
 #   services.kurage.mcp.enable = true;
-#   services.kurage.settings = {
-#     default_model = "claude-opus-4-6";
-#     output = "pretty";
-#   };
+#   services.kurage.settings.apiKeyFile = "~/.config/cursor/api-key";
 #
 # Module factory: receives { hmHelpers } from flake.nix, returns HM module.
 { hmHelpers }:
@@ -29,17 +33,34 @@ with lib; let
   inherit (hmHelpers) mkMcpOptions mkMcpServerEntry;
   cfg = config.services.kurage;
   mcpCfg = cfg.mcp;
+  homeDir = config.home.homeDirectory;
 
-  # Generate YAML config from Nix options
-  configYaml = pkgs.writeText "kurage.yaml"
+  # Default API key file path (sops-nix decrypted location)
+  defaultApiKeyFile = "${homeDir}/.config/cursor/api-key";
+
+  # Resolved API key file (explicit setting > default)
+  resolvedApiKeyFile =
+    if cfg.settings.apiKeyFile != null
+    then cfg.settings.apiKeyFile
+    else defaultApiKeyFile;
+
+  # Config file (JSON is valid YAML — serde_yaml_ng parses both)
+  configFile = pkgs.writeText "kurage.yaml"
     (builtins.toJSON ({
       api_url = cfg.settings.apiUrl;
+      api_key_file = resolvedApiKeyFile;
       default_model = cfg.settings.defaultModel;
       output = cfg.settings.output;
       poll_interval = cfg.settings.pollInterval;
-    } // optionalAttrs (cfg.settings.apiKeyFile != null) {
-      api_key_file = cfg.settings.apiKeyFile;
     }));
+
+  # MCP server environment — ensures CURSOR_API_KEY is available to the
+  # MCP server process. This is critical: when Claude Code launches kurage
+  # as an MCP server, the process inherits NO user env. Without this, the
+  # API key file fallback in auth.rs is the only auth path.
+  mcpEnv = optionalAttrs cfg.settings.propagateApiKey {
+    KURAGE_CONFIG = "${configFile}";
+  };
 in {
   options.services.kurage = {
     enable = mkEnableOption "kurage — Cursor Cloud Agents CLI + MCP server";
@@ -69,8 +90,8 @@ in {
         default = null;
         description = ''
           Path to file containing the Cursor API key.
-          When null, kurage falls back to CURSOR_API_KEY env var
-          or ~/.config/cursor/api-key.
+          When null, defaults to ~/.config/cursor/api-key
+          (standard sops-nix decrypted location).
         '';
       };
 
@@ -91,6 +112,16 @@ in {
         default = 5;
         description = "Polling interval in seconds for --follow commands.";
       };
+
+      propagateApiKey = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Pass config file path to the MCP server process via KURAGE_CONFIG env.
+          Ensures the MCP server can find the API key when launched by Claude
+          Code or other MCP clients that don't inherit user environment.
+        '';
+      };
     };
   };
 
@@ -99,14 +130,16 @@ in {
     (mkIf cfg.enable {
       home.packages = [ cfg.package ];
 
-      xdg.configFile."kurage/kurage.yaml".source = configYaml;
+      xdg.configFile."kurage/kurage.yaml".source = configFile;
     })
 
-    # ── MCP server entry (all platforms, consumed by anvil) ──────────
+    # ── MCP server entry (all platforms, consumed by claude/anvil) ────
     (mkIf mcpCfg.enable {
-      services.kurage.mcp.serverEntry = mkMcpServerEntry {
+      services.kurage.mcp.serverEntry = mkMcpServerEntry ({
         command = "${mcpCfg.package}/bin/kurage";
-      };
+      } // optionalAttrs (mcpEnv != {}) {
+        env = mcpEnv;
+      });
     })
   ];
 }
