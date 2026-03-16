@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use shikumi::{ConfigDiscovery, Format};
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
@@ -36,33 +37,35 @@ impl KurageConfig {
     pub fn load() -> Self {
         // Priority:
         // 1. KURAGE_CONFIG env (set by Nix HM module for MCP server context)
-        // 2. XDG_CONFIG_HOME/kurage/kurage.yaml
-        // 3. ~/.config/kurage/kurage.yaml
-        // 4. Defaults
+        // 2. shikumi standard discovery (XDG_CONFIG_HOME, ~/.config/kurage/)
+        // 3. Defaults
 
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-
-        let candidates: Vec<PathBuf> = [
-            // Nix module sets this for MCP server processes that lack user env
-            std::env::var("KURAGE_CONFIG").map(PathBuf::from).ok(),
-            std::env::var("XDG_CONFIG_HOME")
-                .map(|x| PathBuf::from(x).join("kurage/kurage.yaml"))
-                .ok(),
-            Some(PathBuf::from(&home).join(".config/kurage/kurage.yaml")),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-
-        for candidate in &candidates {
-            if candidate.exists() {
-                if let Ok(content) = std::fs::read_to_string(candidate) {
-                    // serde_yaml_ng parses both YAML and JSON (YAML is a superset)
+        // Check Nix module env override first
+        if let Ok(path) = std::env::var("KURAGE_CONFIG") {
+            let path = PathBuf::from(path);
+            if path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&path) {
                     match serde_yaml_ng::from_str::<Self>(&content) {
                         Ok(config) => return config,
                         Err(e) => {
-                            tracing::warn!("failed to parse {}: {e}", candidate.display());
+                            tracing::warn!("failed to parse {}: {e}", path.display());
                         }
+                    }
+                }
+            }
+        }
+
+        // Standard XDG discovery via shikumi
+        let discovery = ConfigDiscovery::new("kurage")
+            .env_override("KURAGE_CONFIG")
+            .formats(&[Format::Yaml]);
+
+        if let Ok(path) = discovery.discover() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                match serde_yaml_ng::from_str::<Self>(&content) {
+                    Ok(config) => return config,
+                    Err(e) => {
+                        tracing::warn!("failed to parse {}: {e}", path.display());
                     }
                 }
             }

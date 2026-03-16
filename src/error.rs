@@ -2,14 +2,8 @@ use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum KurageError {
-    #[error("HTTP request failed: {0}")]
-    Request(#[from] reqwest::Error),
-
-    #[error("API returned {status}: {body}")]
-    Api { status: u16, body: String },
-
-    #[error("JSON parse error: {0}")]
-    Json(#[from] serde_json::Error),
+    #[error("HTTP error: {0}")]
+    Http(#[from] todoku::TodokuError),
 
     #[error("API key not found — set --api-key, CURSOR_API_KEY, or create {path}")]
     NoApiKey { path: PathBuf },

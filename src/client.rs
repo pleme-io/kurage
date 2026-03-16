@@ -3,105 +3,41 @@ use crate::api::types::{
     FollowupResponse, GetArtifactResponse, LaunchRequest, MeResponse, ModelList, RepoList,
     StopResponse,
 };
-use crate::error::{KurageError, Result};
+use crate::error::Result;
+use todoku::{BearerToken, HttpClient};
 
 /// HTTP client for the Cursor Cloud Agents API.
 ///
-/// Auth uses Bearer token per the OpenAPI spec (`bearerAuth`, scheme: bearer).
+/// Wraps `todoku::HttpClient` with Bearer auth per the OpenAPI spec.
 /// All endpoints are prefixed with `/v0`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CursorCloudClient {
-    inner: reqwest::Client,
-    base_url: String,
-    api_key: String,
+    http: HttpClient,
+}
+
+impl std::fmt::Debug for CursorCloudClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CursorCloudClient").finish()
+    }
 }
 
 impl CursorCloudClient {
-    /// Create a new client.
+    /// Create a new client with Bearer token authentication.
     pub fn new(base_url: &str, api_key: &str) -> Result<Self> {
-        let inner = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
+        let http = HttpClient::builder()
+            .base_url(base_url)
+            .auth(BearerToken::new(api_key))
             .user_agent("pleme-io/kurage 0.1.0")
-            .build()
-            .map_err(KurageError::Request)?;
+            .build()?;
 
-        Ok(Self {
-            inner,
-            base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: api_key.to_string(),
-        })
-    }
-
-    fn url(&self, path: &str) -> String {
-        format!("{}/{}", self.base_url, path.trim_start_matches('/'))
-    }
-
-    async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .inner
-            .get(&self.url(path))
-            .bearer_auth(&self.api_key)
-            .send()
-            .await
-            .map_err(KurageError::Request)?;
-        Self::handle_response(resp).await
-    }
-
-    async fn post<B: serde::Serialize, T: serde::de::DeserializeOwned>(
-        &self,
-        path: &str,
-        body: &B,
-    ) -> Result<T> {
-        let resp = self
-            .inner
-            .post(&self.url(path))
-            .bearer_auth(&self.api_key)
-            .json(body)
-            .send()
-            .await
-            .map_err(KurageError::Request)?;
-        Self::handle_response(resp).await
-    }
-
-    async fn post_empty<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .inner
-            .post(&self.url(path))
-            .bearer_auth(&self.api_key)
-            .send()
-            .await
-            .map_err(KurageError::Request)?;
-        Self::handle_response(resp).await
-    }
-
-    async fn delete<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp = self
-            .inner
-            .delete(&self.url(path))
-            .bearer_auth(&self.api_key)
-            .send()
-            .await
-            .map_err(KurageError::Request)?;
-        Self::handle_response(resp).await
-    }
-
-    async fn handle_response<T: serde::de::DeserializeOwned>(
-        resp: reqwest::Response,
-    ) -> Result<T> {
-        let status = resp.status().as_u16();
-        if !resp.status().is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(KurageError::Api { status, body });
-        }
-        let text = resp.text().await.map_err(KurageError::Request)?;
-        serde_json::from_str(&text).map_err(KurageError::Json)
+        Ok(Self { http })
     }
 
     // ── Public API methods ──────────────────────────────────────────────────
 
     /// POST /v0/agents — Launch a new cloud agent.
     pub async fn launch(&self, req: &LaunchRequest) -> Result<Agent> {
-        self.post("/v0/agents", req).await
+        Ok(self.http.post("/v0/agents", req).await?)
     }
 
     /// GET /v0/agents — List agents with optional pagination and PR filter.
@@ -118,37 +54,37 @@ impl CursorCloudClient {
         if let Some(pr) = pr_url {
             path.push_str(&format!("&prUrl={}", urlencoding::encode(pr)));
         }
-        self.get(&path).await
+        Ok(self.http.get(&path).await?)
     }
 
     /// GET /v0/agents/{id} — Get agent status.
     pub async fn status(&self, id: &str) -> Result<Agent> {
-        self.get(&format!("/v0/agents/{id}")).await
+        Ok(self.http.get(&format!("/v0/agents/{id}")).await?)
     }
 
     /// GET /v0/agents/{id}/conversation — Get agent conversation logs.
     pub async fn logs(&self, id: &str) -> Result<Conversation> {
-        self.get(&format!("/v0/agents/{id}/conversation")).await
+        Ok(self.http.get(&format!("/v0/agents/{id}/conversation")).await?)
     }
 
     /// POST /v0/agents/{id}/stop — Stop a running agent.
     pub async fn stop(&self, id: &str) -> Result<StopResponse> {
-        self.post_empty(&format!("/v0/agents/{id}/stop")).await
+        Ok(self.http.post(&format!("/v0/agents/{id}/stop"), &serde_json::Value::Null).await?)
     }
 
     /// POST /v0/agents/{id}/followup — Add a followup instruction.
     pub async fn followup(&self, id: &str, req: &FollowupRequest) -> Result<FollowupResponse> {
-        self.post(&format!("/v0/agents/{id}/followup"), req).await
+        Ok(self.http.post(&format!("/v0/agents/{id}/followup"), req).await?)
     }
 
     /// DELETE /v0/agents/{id} — Delete an agent permanently.
     pub async fn delete_agent(&self, id: &str) -> Result<DeleteResponse> {
-        self.delete(&format!("/v0/agents/{id}")).await
+        Ok(self.http.delete(&format!("/v0/agents/{id}")).await?)
     }
 
     /// GET /v0/agents/{id}/artifacts — List artifacts generated by an agent.
     pub async fn artifacts(&self, id: &str) -> Result<ArtifactList> {
-        self.get(&format!("/v0/agents/{id}/artifacts")).await
+        Ok(self.http.get(&format!("/v0/agents/{id}/artifacts")).await?)
     }
 
     /// GET /v0/agents/{id}/artifacts/download?path={path} — Get a presigned download URL.
@@ -157,25 +93,27 @@ impl CursorCloudClient {
         id: &str,
         path: &str,
     ) -> Result<GetArtifactResponse> {
-        self.get(&format!(
-            "/v0/agents/{id}/artifacts/download?path={}",
-            urlencoding::encode(path)
-        ))
-        .await
+        Ok(self
+            .http
+            .get(&format!(
+                "/v0/agents/{id}/artifacts/download?path={}",
+                urlencoding::encode(path)
+            ))
+            .await?)
     }
 
     /// GET /v0/models — List available models.
     pub async fn models(&self) -> Result<ModelList> {
-        self.get("/v0/models").await
+        Ok(self.http.get("/v0/models").await?)
     }
 
     /// GET /v0/repositories — List accessible GitHub repositories.
     pub async fn repos(&self) -> Result<RepoList> {
-        self.get("/v0/repositories").await
+        Ok(self.http.get("/v0/repositories").await?)
     }
 
     /// GET /v0/me — Get API key information.
     pub async fn me(&self) -> Result<MeResponse> {
-        self.get("/v0/me").await
+        Ok(self.http.get("/v0/me").await?)
     }
 }
