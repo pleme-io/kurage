@@ -8,7 +8,7 @@
 #   - MCP server entry (consumed by claude/anvil for all AI agents)
 #   - CLI binary in PATH
 #   - Config file generation (~/.config/kurage/kurage.yaml)
-#   - Env propagation: CURSOR_API_KEY passed to MCP server process
+#   - Env propagation: KURAGE_CONFIG passed to MCP server process
 #
 # Two integration paths (use one or both):
 #   1. Service-level: services.kurage.mcp.enable + claude.mcp.kurage.enable
@@ -17,9 +17,9 @@
 #      → All agents (Cursor, Claude, OpenCode) get kurage
 #
 # Usage:
+#   services.kurage.package = inputs.kurage.packages.${system}.default;
 #   services.kurage.enable = true;
 #   services.kurage.mcp.enable = true;
-#   services.kurage.settings.apiKeyFile = "~/.config/cursor/api-key";
 #
 # Module factory: receives { hmHelpers } from flake.nix, returns HM module.
 { hmHelpers }:
@@ -54,10 +54,8 @@ with lib; let
       poll_interval = cfg.settings.pollInterval;
     }));
 
-  # MCP server environment — ensures CURSOR_API_KEY is available to the
-  # MCP server process. This is critical: when Claude Code launches kurage
-  # as an MCP server, the process inherits NO user env. Without this, the
-  # API key file fallback in auth.rs is the only auth path.
+  # MCP server environment — ensures config is discoverable by the MCP
+  # server process even when launched by Claude Code (no user env inherited).
   mcpEnv = optionalAttrs cfg.settings.propagateApiKey {
     KURAGE_CONFIG = "${configFile}";
   };
@@ -67,17 +65,19 @@ in {
 
     package = mkOption {
       type = types.package;
-      default = pkgs.kurage or (throw "kurage package not found — set services.kurage.package");
-      defaultText = literalExpression "pkgs.kurage";
-      description = "The kurage binary package.";
+      description = ''
+        The kurage binary package. Must be set explicitly from your flake input:
+          services.kurage.package = inputs.kurage.packages.''${system}.default;
+      '';
     };
 
-    # MCP server options (from substrate helpers)
+    # MCP server options (from substrate helpers).
+    # The mcp.package default is set in config via mkDefault to follow cfg.package.
     mcp = mkMcpOptions {
-      defaultPackage = pkgs.kurage or (throw "kurage package not found");
+      defaultPackage = pkgs.hello; # placeholder — overridden by config below
     };
 
-    # Declarative config options
+    # Declarative config options — generate ~/.config/kurage/kurage.yaml
     settings = {
       apiUrl = mkOption {
         type = types.str;
@@ -126,6 +126,11 @@ in {
   };
 
   config = mkMerge [
+    # ── MCP package follows main package (avoids duplicate package config) ──
+    {
+      services.kurage.mcp.package = mkDefault cfg.package;
+    }
+
     # ── CLI binary + config file (all platforms) ─────────────────────
     (mkIf cfg.enable {
       home.packages = [ cfg.package ];
