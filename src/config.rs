@@ -23,9 +23,9 @@ impl Default for KurageConfig {
     fn default() -> Self {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
         Self {
-            api_url: "https://api.cursor.com/v0".into(),
+            api_url: "https://api.cursor.com".into(),
             api_key_file: PathBuf::from(&home).join(".config/cursor/api-key"),
-            default_model: "claude-opus-4-6".into(),
+            default_model: "claude-4.6-opus-high-thinking".into(),
             output: OutputFormat::Pretty,
             poll_interval: 5,
         }

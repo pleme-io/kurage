@@ -81,7 +81,7 @@ in {
     settings = {
       apiUrl = mkOption {
         type = types.str;
-        default = "https://api.cursor.com/v0";
+        default = "https://api.cursor.com";
         description = "Cursor Cloud Agents API base URL.";
       };
 
@@ -97,7 +97,7 @@ in {
 
       defaultModel = mkOption {
         type = types.str;
-        default = "claude-opus-4-6";
+        default = "claude-4.6-opus-high-thinking";
         description = "Default AI model for cloud agents.";
       };
 
