@@ -7,6 +7,7 @@ mod client;
 mod commands;
 mod config;
 mod error;
+mod format;
 mod mcp;
 mod output;
 
