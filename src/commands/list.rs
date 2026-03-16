@@ -13,7 +13,7 @@ pub struct Args {
 }
 
 pub async fn run(args: Args, client: &CursorCloudClient, format: OutputFormat) -> Result<()> {
-    let list = client.list(args.limit).await?;
+    let list = client.list(args.limit, None, None).await?;
     output::print_agent_list(&list, format);
     Ok(())
 }

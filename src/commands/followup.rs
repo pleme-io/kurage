@@ -20,9 +20,14 @@ pub async fn run(args: Args, client: &CursorCloudClient, format: OutputFormat) -
     let req = FollowupRequest {
         prompt: PromptSpec {
             text: args.message.join(" "),
+            images: None,
         },
     };
-    let agent = client.followup(&args.id, &req).await?;
-    output::print_agent(&agent, format);
+    let resp = client.followup(&args.id, &req).await?;
+    if format == OutputFormat::Json {
+        output::print_json(&resp);
+    } else {
+        println!("Followup sent to agent {}", resp.id);
+    }
     Ok(())
 }

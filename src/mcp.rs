@@ -7,6 +7,7 @@ use rmcp::{
 };
 use serde::Deserialize;
 
+use crate::api::types::MessageType;
 use crate::auth;
 use crate::client::CursorCloudClient;
 use crate::config::KurageConfig;
@@ -73,16 +74,26 @@ impl KurageMcp {
 
     #[tool(description = "Launch a new Cursor Cloud Agent to work on a GitHub repository. Returns agent ID and initial status.")]
     async fn launch_agent(&self, Parameters(input): Parameters<LaunchInput>) -> String {
+        let model_str = input.model.unwrap_or_else(|| self.default_model.clone());
         let req = crate::api::types::LaunchRequest {
-            prompt: crate::api::types::PromptSpec { text: input.prompt },
-            model: input.model.unwrap_or_else(|| self.default_model.clone()),
-            source: crate::api::types::SourceSpec {
-                repository: input.repo,
+            prompt: crate::api::types::PromptSpec {
+                text: input.prompt,
+                images: None,
             },
-            target: crate::api::types::TargetSpec {
+            model: if model_str.is_empty() { None } else { Some(model_str) },
+            source: crate::api::types::SourceSpec {
+                repository: Some(input.repo),
+                r#ref: None,
+                pr_url: None,
+            },
+            target: Some(crate::api::types::TargetSpec {
                 auto_create_pr: input.auto_pr.unwrap_or(true),
                 auto_branch: input.auto_branch.unwrap_or(true),
-            },
+                open_as_cursor_github_app: false,
+                skip_reviewer_request: false,
+                branch_name: None,
+            }),
+            webhook: None,
         };
         match self.client.launch(&req).await {
             Ok(agent) => format_agent(&agent),
@@ -90,10 +101,10 @@ impl KurageMcp {
         }
     }
 
-    #[tool(description = "List Cursor Cloud Agents. Returns IDs, statuses, repos, and prompts.")]
+    #[tool(description = "List Cursor Cloud Agents. Returns IDs, statuses, repos, and names.")]
     async fn list_agents(&self, Parameters(input): Parameters<ListInput>) -> String {
         let limit = input.limit.unwrap_or(20);
-        match self.client.list(limit).await {
+        match self.client.list(limit, None, None).await {
             Ok(list) => {
                 if list.agents.is_empty() {
                     return "No agents found.".into();
@@ -104,13 +115,10 @@ impl KurageMcp {
                         .source
                         .as_ref()
                         .map_or("-", |s| s.repository.as_str());
-                    let prompt = a
-                        .prompt
-                        .as_ref()
-                        .map_or("-".to_string(), |p| truncate(&p.text, 60));
+                    let name = truncate(&a.name, 60);
                     out.push_str(&format!(
                         "  {} | {} | {} | {}\n",
-                        a.id, a.status, repo, prompt
+                        a.id, a.status, repo, name
                     ));
                 }
                 out
@@ -136,13 +144,12 @@ impl KurageMcp {
                 }
                 let mut out = String::new();
                 for msg in &conv.messages {
-                    let role = match msg.role.as_str() {
-                        "user" => "[USER]",
-                        "assistant" => "[AGENT]",
-                        "system" => "[SYSTEM]",
-                        other => other,
+                    let role = match &msg.message_type {
+                        Some(MessageType::UserMessage) => "[USER]",
+                        Some(MessageType::AssistantMessage) => "[AGENT]",
+                        None => "[UNKNOWN]",
                     };
-                    out.push_str(&format!("{role}\n{}\n\n", msg.content));
+                    out.push_str(&format!("{role}\n{}\n\n", msg.text));
                 }
                 out
             }
@@ -163,10 +170,11 @@ impl KurageMcp {
         let req = crate::api::types::FollowupRequest {
             prompt: crate::api::types::PromptSpec {
                 text: input.message,
+                images: None,
             },
         };
         match self.client.followup(&input.id, &req).await {
-            Ok(agent) => format_agent(&agent),
+            Ok(resp) => format!("Followup sent to agent {}", resp.id),
             Err(e) => format!("Error: {e}"),
         }
     }
@@ -179,7 +187,7 @@ impl KurageMcp {
         }
     }
 
-    #[tool(description = "List artifacts (files changed) by a Cursor Cloud Agent.")]
+    #[tool(description = "List artifacts (files generated) by a Cursor Cloud Agent.")]
     async fn agent_artifacts(&self, Parameters(input): Parameters<AgentIdInput>) -> String {
         match self.client.artifacts(&input.id).await {
             Ok(list) => {
@@ -188,7 +196,10 @@ impl KurageMcp {
                 }
                 let mut out = String::new();
                 for a in &list.artifacts {
-                    out.push_str(&format!("{} ({})\n", a.path, a.r#type));
+                    out.push_str(&format!(
+                        "{} ({} bytes, updated {})\n",
+                        a.absolute_path, a.size_bytes, a.updated_at
+                    ));
                 }
                 out
             }
@@ -202,7 +213,7 @@ impl KurageMcp {
             Ok(list) => {
                 let mut out = String::new();
                 for m in &list.models {
-                    out.push_str(&format!("{}: {}\n", m.id, m.name));
+                    out.push_str(&format!("{m}\n"));
                 }
                 out
             }
@@ -216,12 +227,7 @@ impl KurageMcp {
             Ok(list) => {
                 let mut out = String::new();
                 for r in &list.repositories {
-                    let name = if r.full_name.is_empty() {
-                        &r.name
-                    } else {
-                        &r.full_name
-                    };
-                    out.push_str(&format!("{name}: {}\n", r.url));
+                    out.push_str(&format!("{}/{}: {}\n", r.owner, r.name, r.repository));
                 }
                 out
             }
@@ -233,7 +239,12 @@ impl KurageMcp {
     async fn whoami(&self, Parameters(_): Parameters<serde_json::Value>) -> String {
         match self.client.me().await {
             Ok(resp) => {
-                serde_json::to_string_pretty(&resp.data).unwrap_or_else(|_| "{}".into())
+                let mut out = format!("API Key: {}\n", resp.api_key_name);
+                out.push_str(&format!("Created: {}\n", resp.created_at));
+                if let Some(ref email) = resp.user_email {
+                    out.push_str(&format!("Email: {email}\n"));
+                }
+                out
             }
             Err(e) => format!("Error: {e}"),
         }
@@ -259,19 +270,28 @@ impl ServerHandler for KurageMcp {
 fn format_agent(agent: &crate::api::types::Agent) -> String {
     let mut out = String::new();
     out.push_str(&format!("ID: {}\n", agent.id));
+    out.push_str(&format!("Name: {}\n", agent.name));
     out.push_str(&format!("Status: {}\n", agent.status));
-    out.push_str(&format!("Model: {}\n", agent.model));
-    if let Some(ref prompt) = agent.prompt {
-        out.push_str(&format!("Prompt: {}\n", truncate(&prompt.text, 100)));
-    }
     if let Some(ref source) = agent.source {
         out.push_str(&format!("Repo: {}\n", source.repository));
+        if let Some(ref git_ref) = source.r#ref {
+            out.push_str(&format!("Ref: {git_ref}\n"));
+        }
+    }
+    if let Some(ref target) = agent.target {
+        out.push_str(&format!("URL: {}\n", target.url));
+        if let Some(ref branch) = target.branch_name {
+            out.push_str(&format!("Branch: {branch}\n"));
+        }
+        if let Some(ref pr_url) = target.pr_url {
+            out.push_str(&format!("PR: {pr_url}\n"));
+        }
+    }
+    if let Some(ref summary) = agent.summary {
+        out.push_str(&format!("Summary: {summary}\n"));
     }
     if let Some(ref created) = agent.created_at {
         out.push_str(&format!("Created: {created}\n"));
-    }
-    if let Some(ref pr) = agent.pull_request {
-        out.push_str(&format!("PR: {} (#{}) \n", pr.url, pr.number));
     }
     out
 }

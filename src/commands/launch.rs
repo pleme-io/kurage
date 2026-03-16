@@ -34,15 +34,24 @@ pub async fn run(args: Args, client: &CursorCloudClient, model: &str, format: Ou
     let model = args.model.as_deref().unwrap_or(model);
 
     let req = LaunchRequest {
-        prompt: PromptSpec { text: prompt_text },
-        model: model.to_string(),
-        source: SourceSpec {
-            repository: args.repo,
+        prompt: PromptSpec {
+            text: prompt_text,
+            images: None,
         },
-        target: TargetSpec {
+        model: if model.is_empty() { None } else { Some(model.to_string()) },
+        source: SourceSpec {
+            repository: Some(args.repo),
+            r#ref: None,
+            pr_url: None,
+        },
+        target: Some(TargetSpec {
             auto_create_pr: args.auto_pr,
             auto_branch: args.auto_branch,
-        },
+            open_as_cursor_github_app: false,
+            skip_reviewer_request: false,
+            branch_name: None,
+        }),
+        webhook: None,
     };
 
     let agent = client.launch(&req).await?;

@@ -14,9 +14,9 @@ pub struct Args {
 pub async fn run(args: Args, client: &CursorCloudClient, format: OutputFormat) -> Result<()> {
     let resp = client.stop(&args.id).await?;
     if format == OutputFormat::Json {
-        output::print_json(&resp.data);
+        output::print_json(&resp);
     } else {
-        println!("Stopped agent {}", args.id);
+        println!("Stopped agent {}", resp.id);
     }
     Ok(())
 }

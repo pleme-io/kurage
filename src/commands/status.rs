@@ -29,8 +29,10 @@ pub async fn run(
             output::print_agent(&agent, format);
 
             let terminal = matches!(
-                agent.status.as_str(),
-                "completed" | "failed" | "stopped" | "error"
+                agent.status,
+                crate::api::types::AgentStatus::Finished
+                    | crate::api::types::AgentStatus::Error
+                    | crate::api::types::AgentStatus::Expired
             );
             if terminal {
                 break;

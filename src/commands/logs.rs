@@ -1,5 +1,6 @@
 use clap::Args as ClapArgs;
 
+use crate::api::types::MessageType;
 use crate::client::CursorCloudClient;
 use crate::config::OutputFormat;
 use crate::error::Result;
@@ -29,17 +30,16 @@ pub async fn run(
         if args.follow {
             // Only print new messages
             for msg in conv.messages.iter().skip(seen) {
-                let role_label = match msg.role.as_str() {
-                    "user" => "[USER]",
-                    "assistant" => "[AGENT]",
-                    "system" => "[SYSTEM]",
-                    _ => &msg.role,
+                let role_label = match &msg.message_type {
+                    Some(MessageType::UserMessage) => "[USER]",
+                    Some(MessageType::AssistantMessage) => "[AGENT]",
+                    None => "[UNKNOWN]",
                 };
                 if format == OutputFormat::Json {
                     output::print_json(msg);
                 } else {
                     println!("{role_label}");
-                    println!("{}", msg.content);
+                    println!("{}", msg.text);
                     println!();
                 }
             }
@@ -48,8 +48,10 @@ pub async fn run(
             // Check if agent is done
             let agent = client.status(&args.id).await?;
             let terminal = matches!(
-                agent.status.as_str(),
-                "completed" | "failed" | "stopped" | "error"
+                agent.status,
+                crate::api::types::AgentStatus::Finished
+                    | crate::api::types::AgentStatus::Error
+                    | crate::api::types::AgentStatus::Expired
             );
             if terminal {
                 break;

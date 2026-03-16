@@ -1,4 +1,4 @@
-use crate::api::types::{Agent, AgentList, ArtifactList, Conversation, ModelList, RepoList};
+use crate::api::types::{Agent, AgentList, ArtifactList, Conversation, MessageType, ModelList, RepoList};
 use crate::config::OutputFormat;
 use comfy_table::{Table, presets::UTF8_FULL_CONDENSED};
 
@@ -11,24 +11,28 @@ pub fn print_agent(agent: &Agent, format: OutputFormat) {
         OutputFormat::Json => print_json(agent),
         OutputFormat::Pretty | OutputFormat::Table => {
             println!("ID:      {}", agent.id);
+            println!("Name:    {}", agent.name);
             println!("Status:  {}", agent.status);
-            println!("Model:   {}", agent.model);
-            if let Some(ref prompt) = agent.prompt {
-                let text = if prompt.text.len() > 80 {
-                    format!("{}...", &prompt.text[..77])
-                } else {
-                    prompt.text.clone()
-                };
-                println!("Prompt:  {text}");
-            }
             if let Some(ref source) = agent.source {
                 println!("Repo:    {}", source.repository);
+                if let Some(ref git_ref) = source.r#ref {
+                    println!("Ref:     {git_ref}");
+                }
+            }
+            if let Some(ref target) = agent.target {
+                println!("URL:     {}", target.url);
+                if let Some(ref branch) = target.branch_name {
+                    println!("Branch:  {branch}");
+                }
+                if let Some(ref pr_url) = target.pr_url {
+                    println!("PR:      {pr_url}");
+                }
+            }
+            if let Some(ref summary) = agent.summary {
+                println!("Summary: {summary}");
             }
             if let Some(ref created) = agent.created_at {
                 println!("Created: {created}");
-            }
-            if let Some(ref pr) = agent.pull_request {
-                println!("PR:      {} (#{}) ", pr.url, pr.number);
             }
         }
     }
@@ -47,17 +51,12 @@ pub fn print_agent_list(list: &AgentList, format: OutputFormat) {
                     .source
                     .as_ref()
                     .map_or("-", |s| s.repository.as_str());
-                let prompt = agent
-                    .prompt
-                    .as_ref()
-                    .map_or("-".to_string(), |p| {
-                        if p.text.len() > 50 {
-                            format!("{}...", &p.text[..47])
-                        } else {
-                            p.text.clone()
-                        }
-                    });
-                println!("{} | {:10} | {} | {}", agent.id, agent.status, repo, prompt);
+                let name = if agent.name.len() > 50 {
+                    format!("{}...", &agent.name[..47])
+                } else {
+                    agent.name.clone()
+                };
+                println!("{} | {:10} | {} | {}", agent.id, agent.status, repo, name);
             }
         }
         OutputFormat::Table => {
@@ -67,28 +66,23 @@ pub fn print_agent_list(list: &AgentList, format: OutputFormat) {
             }
             let mut table = Table::new();
             table.load_preset(UTF8_FULL_CONDENSED);
-            table.set_header(["ID", "Status", "Model", "Repo", "Prompt"]);
+            table.set_header(["ID", "Status", "Name", "Repo"]);
             for agent in &list.agents {
                 let repo = agent
                     .source
                     .as_ref()
                     .map_or("-".to_string(), |s| s.repository.clone());
-                let prompt = agent
-                    .prompt
-                    .as_ref()
-                    .map_or("-".to_string(), |p| {
-                        if p.text.len() > 40 {
-                            format!("{}...", &p.text[..37])
-                        } else {
-                            p.text.clone()
-                        }
-                    });
+                let name = if agent.name.len() > 40 {
+                    format!("{}...", &agent.name[..37])
+                } else {
+                    agent.name.clone()
+                };
+                let status = agent.status.to_string();
                 table.add_row([
                     &agent.id,
-                    &agent.status,
-                    &agent.model,
+                    &status,
+                    &name,
                     &repo,
-                    &prompt,
                 ]);
             }
             println!("{table}");
@@ -105,14 +99,13 @@ pub fn print_conversation(conv: &Conversation, format: OutputFormat) {
                 return;
             }
             for msg in &conv.messages {
-                let role_label = match msg.role.as_str() {
-                    "user" => "[USER]",
-                    "assistant" => "[AGENT]",
-                    "system" => "[SYSTEM]",
-                    _ => &msg.role,
+                let role_label = match &msg.message_type {
+                    Some(MessageType::UserMessage) => "[USER]",
+                    Some(MessageType::AssistantMessage) => "[AGENT]",
+                    None => "[UNKNOWN]",
                 };
                 println!("{role_label}");
-                println!("{}", msg.content);
+                println!("{}", msg.text);
                 println!();
             }
         }
@@ -124,7 +117,7 @@ pub fn print_models(list: &ModelList, format: OutputFormat) {
         OutputFormat::Json => print_json(list),
         OutputFormat::Pretty | OutputFormat::Table => {
             for model in &list.models {
-                println!("{}: {}", model.id, model.name);
+                println!("{model}");
             }
         }
     }
@@ -135,12 +128,7 @@ pub fn print_repos(list: &RepoList, format: OutputFormat) {
         OutputFormat::Json => print_json(list),
         OutputFormat::Pretty | OutputFormat::Table => {
             for repo in &list.repositories {
-                let name = if repo.full_name.is_empty() {
-                    &repo.name
-                } else {
-                    &repo.full_name
-                };
-                println!("{name}: {}", repo.url);
+                println!("{}/{}: {}", repo.owner, repo.name, repo.repository);
             }
         }
     }
@@ -155,7 +143,7 @@ pub fn print_artifacts(list: &ArtifactList, format: OutputFormat) {
                 return;
             }
             for artifact in &list.artifacts {
-                println!("{} ({})", artifact.path, artifact.r#type);
+                println!("{} ({} bytes, updated {})", artifact.absolute_path, artifact.size_bytes, artifact.updated_at);
             }
         }
     }

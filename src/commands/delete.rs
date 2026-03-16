@@ -14,9 +14,9 @@ pub struct Args {
 pub async fn run(args: Args, client: &CursorCloudClient, format: OutputFormat) -> Result<()> {
     let resp = client.delete_agent(&args.id).await?;
     if format == OutputFormat::Json {
-        output::print_json(&resp.data);
+        output::print_json(&resp);
     } else {
-        println!("Deleted agent {}", args.id);
+        println!("Deleted agent {}", resp.id);
     }
     Ok(())
 }
