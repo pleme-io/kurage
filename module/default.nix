@@ -138,16 +138,17 @@ in {
       xdg.configFile."kurage/kurage.yaml".source = configFile;
     })
 
-    # Self-register with anvil (primary path)
-    (mkIf mcpCfg.enable (mkAnvilRegistration ({
+    # Self-register with anvil unconditionally — enable flag controls activation.
+    (mkAnvilRegistration ({
       name = "kurage";
       command = "kurage";
       package = mcpCfg.package;
+      enable = mcpCfg.enable;
       description = "Cursor Cloud Agents — launch, monitor, manage AI coding agents";
       scopes = mcpCfg.scopes;
     } // optionalAttrs (mcpEnv != {}) {
       env = mcpEnv;
-    })))
+    }))
 
     # Deprecated: serverEntry (kept for backward compatibility)
     (mkIf mcpCfg.enable {
