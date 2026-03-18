@@ -127,9 +127,9 @@ in {
 
   config = mkMerge [
     # ── MCP package follows main package (avoids duplicate package config) ──
-    {
+    (mkIf cfg.enable {
       services.kurage.mcp.package = mkDefault cfg.package;
-    }
+    })
 
     # ── CLI binary + config file (all platforms) ─────────────────────
     (mkIf cfg.enable {
