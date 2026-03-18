@@ -30,7 +30,7 @@
   ...
 }:
 with lib; let
-  inherit (hmHelpers) mkMcpOptions mkMcpServerEntry mkAnvilRegistration;
+  inherit (hmHelpers) mkMcpOptions mkMcpServerEntry;
   cfg = config.services.kurage;
   mcpCfg = cfg.mcp;
   homeDir = config.home.homeDirectory;
@@ -127,9 +127,9 @@ in {
 
   config = mkMerge [
     # ── MCP package follows main package (avoids duplicate package config) ──
-    (mkIf cfg.enable {
+    {
       services.kurage.mcp.package = mkDefault cfg.package;
-    })
+    }
 
     # ── CLI binary + config file (all platforms) ─────────────────────
     (mkIf cfg.enable {
@@ -138,19 +138,7 @@ in {
       xdg.configFile."kurage/kurage.yaml".source = configFile;
     })
 
-    # Self-register with anvil unconditionally — enable flag controls activation.
-    (mkAnvilRegistration ({
-      name = "kurage";
-      command = "kurage";
-      package = mcpCfg.package;
-      enable = mcpCfg.enable;
-      description = "Cursor Cloud Agents — launch, monitor, manage AI coding agents";
-      scopes = mcpCfg.scopes;
-    } // optionalAttrs (mcpEnv != {}) {
-      env = mcpEnv;
-    }))
-
-    # Deprecated: serverEntry (kept for backward compatibility)
+    # ── MCP server entry (all platforms, consumed by claude/anvil) ────
     (mkIf mcpCfg.enable {
       services.kurage.mcp.serverEntry = mkMcpServerEntry ({
         command = "${mcpCfg.package}/bin/kurage";
