@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 // ── Agent status enum ──────────────────────────────────────────────────────────
 
 /// Agent lifecycle status.
-/// Maps to the `status` enum in the OpenAPI spec: RUNNING, FINISHED, ERROR, CREATING, EXPIRED.
+/// Maps to the `status` enum in the `OpenAPI` spec: RUNNING, FINISHED, ERROR, CREATING, EXPIRED.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AgentStatus {
@@ -29,7 +29,7 @@ impl std::fmt::Display for AgentStatus {
 // ── Message type enum ──────────────────────────────────────────────────────────
 
 /// Conversation message type.
-/// Maps to the `type` enum: user_message, assistant_message.
+/// Maps to the `type` enum: `user_message`, `assistant_message`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageType {
@@ -95,6 +95,7 @@ pub struct SourceSpec {
 /// Target configuration for the agent's output.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TargetSpec {
     /// Whether to automatically create a pull request when the agent completes.
     #[serde(default)]
@@ -196,7 +197,7 @@ pub struct AgentTarget {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Agent {
-    /// Unique identifier for the cloud agent (e.g. "bc_abc123").
+    /// Unique identifier for the cloud agent (e.g. `bc_abc123`).
     pub id: String,
     /// Name for the agent.
     #[serde(default)]
@@ -250,8 +251,9 @@ pub struct Message {
     /// Unique identifier for the message.
     #[serde(default)]
     pub id: String,
-    /// Type of message (user_message or assistant_message).
+    /// Type of message (`user_message` or `assistant_message`).
     #[serde(default, rename = "type")]
+    #[allow(clippy::struct_field_names)]
     pub message_type: Option<MessageType>,
     /// The content of the message.
     #[serde(default)]

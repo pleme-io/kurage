@@ -8,7 +8,7 @@ use todoku::{BearerToken, HttpClient};
 
 /// HTTP client for the Cursor Cloud Agents API.
 ///
-/// Wraps `todoku::HttpClient` with Bearer auth per the OpenAPI spec.
+/// Wraps `todoku::HttpClient` with Bearer auth per the `OpenAPI` spec.
 /// All endpoints are prefixed with `/v0`.
 #[derive(Clone)]
 pub struct CursorCloudClient {
@@ -47,12 +47,13 @@ impl CursorCloudClient {
         cursor: Option<&str>,
         pr_url: Option<&str>,
     ) -> Result<AgentList> {
+        use std::fmt::Write;
         let mut path = format!("/v0/agents?limit={limit}");
         if let Some(c) = cursor {
-            path.push_str(&format!("&cursor={}", urlencoding::encode(c)));
+            let _ = write!(path, "&cursor={}", urlencoding::encode(c));
         }
         if let Some(pr) = pr_url {
-            path.push_str(&format!("&prUrl={}", urlencoding::encode(pr)));
+            let _ = write!(path, "&prUrl={}", urlencoding::encode(pr));
         }
         Ok(self.http.get(&path).await?)
     }

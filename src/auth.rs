@@ -1,25 +1,22 @@
 use crate::config::KurageConfig;
 use crate::error::{KurageError, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Resolve the Cursor API key from (in priority order):
 /// 1. Explicit CLI flag value
-/// 2. CURSOR_API_KEY environment variable
-/// 3. Contents of the configured api_key_file
+/// 2. `CURSOR_API_KEY` environment variable
+/// 3. Contents of the configured `api_key_file`
 pub fn resolve_api_key(explicit: Option<&str>, config: &KurageConfig) -> Result<String> {
-    // 1. Explicit flag
     if let Some(key) = explicit {
         return Ok(key.to_string());
     }
 
-    // 2. Environment variable
-    if let Ok(key) = std::env::var("CURSOR_API_KEY") {
-        if !key.is_empty() {
-            return Ok(key);
-        }
+    if let Ok(key) = std::env::var("CURSOR_API_KEY")
+        && !key.is_empty()
+    {
+        return Ok(key);
     }
 
-    // 3. File
     let path = expand_tilde(&config.api_key_file);
     match std::fs::read_to_string(&path) {
         Ok(content) => {
@@ -34,12 +31,12 @@ pub fn resolve_api_key(explicit: Option<&str>, config: &KurageConfig) -> Result<
     }
 }
 
-fn expand_tilde(path: &PathBuf) -> PathBuf {
+fn expand_tilde(path: &Path) -> PathBuf {
     let s = path.to_string_lossy();
-    if let Some(rest) = s.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
+    if let Some(rest) = s.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home).join(rest);
     }
-    path.clone()
+    path.to_path_buf()
 }

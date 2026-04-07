@@ -8,7 +8,7 @@ use crate::output;
 
 #[derive(ClapArgs)]
 pub struct Args {
-    /// GitHub repository URL (e.g. https://github.com/pleme-io/nexus)
+    /// GitHub repository URL (e.g. `https://github.com/pleme-io/nexus`)
     #[arg(long, short)]
     pub repo: String,
 
