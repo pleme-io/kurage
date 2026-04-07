@@ -73,6 +73,15 @@ struct DownloadArtifactInput {
     path: String,
 }
 
+/// Empty input for tools that take no parameters.
+///
+/// MCP requires every tool to have an `inputSchema` that is a valid JSON Schema
+/// object with `type: "object"`. Using `serde_json::Value` here generates a
+/// schema of `{"title":"AnyValue"}` with no `type` field, which Claude Code's
+/// MCP loader rejects, causing the entire kurage server to surface zero tools.
+#[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
+struct NoInput {}
+
 // ── MCP Server ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -198,7 +207,7 @@ impl KurageMcp {
     }
 
     #[tool(description = "List available AI models for Cursor Cloud Agents.")]
-    async fn list_models(&self, Parameters(_): Parameters<serde_json::Value>) -> String {
+    async fn list_models(&self, Parameters(_): Parameters<NoInput>) -> String {
         match self.client.models().await {
             Ok(list) => format::format_models(&list),
             Err(e) => format!("Error: {e}"),
@@ -206,7 +215,7 @@ impl KurageMcp {
     }
 
     #[tool(description = "List GitHub repositories connected to Cursor. Rate limited: 1/min, 30/hour.")]
-    async fn list_repos(&self, Parameters(_): Parameters<serde_json::Value>) -> String {
+    async fn list_repos(&self, Parameters(_): Parameters<NoInput>) -> String {
         match self.client.repos().await {
             Ok(list) => format::format_repos(&list),
             Err(e) => format!("Error: {e}"),
@@ -214,7 +223,7 @@ impl KurageMcp {
     }
 
     #[tool(description = "Get Cursor API key information (key name, creation date, user email).")]
-    async fn whoami(&self, Parameters(_): Parameters<serde_json::Value>) -> String {
+    async fn whoami(&self, Parameters(_): Parameters<NoInput>) -> String {
         match self.client.me().await {
             Ok(resp) => format::format_me(&resp),
             Err(e) => format!("Error: {e}"),
