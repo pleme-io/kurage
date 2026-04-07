@@ -35,3 +35,6 @@ strip = true
 
 [lints.clippy]
 pedantic = "warn"
+
+[dev-dependencies]
+tempfile = "3.27.0"

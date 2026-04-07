@@ -40,3 +40,74 @@ fn expand_tilde(path: &Path) -> PathBuf {
     }
     path.to_path_buf()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn config_with_key_file(path: PathBuf) -> KurageConfig {
+        KurageConfig {
+            api_url: "https://api.cursor.com".into(),
+            api_key_file: path,
+            default_model: "test".into(),
+            output: crate::config::OutputFormat::Pretty,
+            poll_interval: 5,
+        }
+    }
+
+    #[test]
+    fn resolve_explicit_key() {
+        let config = config_with_key_file(PathBuf::from("/nonexistent"));
+        let key = resolve_api_key(Some("explicit-key"), &config).unwrap();
+        assert_eq!(key, "explicit-key");
+    }
+
+    #[test]
+    fn resolve_key_from_file() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        write!(tmp, "  file-key-value  \n").unwrap();
+        let config = config_with_key_file(tmp.path().to_path_buf());
+        let key = resolve_api_key(None, &config).unwrap();
+        assert_eq!(key, "file-key-value");
+    }
+
+    #[test]
+    fn resolve_key_empty_file_is_error() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        write!(tmp, "   \n  ").unwrap();
+        let config = config_with_key_file(tmp.path().to_path_buf());
+        let result = resolve_api_key(None, &config);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("API key not found"));
+    }
+
+    #[test]
+    fn resolve_key_missing_file_is_error() {
+        let config = config_with_key_file(PathBuf::from("/tmp/kurage-nonexistent-key-file"));
+        let result = resolve_api_key(None, &config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn expand_tilde_with_home() {
+        let result = expand_tilde(Path::new("~/.config/cursor/api-key"));
+        assert!(!result.to_string_lossy().starts_with("~/"));
+        assert!(result.to_string_lossy().ends_with(".config/cursor/api-key"));
+    }
+
+    #[test]
+    fn expand_tilde_absolute_path_unchanged() {
+        let path = Path::new("/etc/kurage/key");
+        let result = expand_tilde(path);
+        assert_eq!(result, PathBuf::from("/etc/kurage/key"));
+    }
+
+    #[test]
+    fn expand_tilde_relative_path_unchanged() {
+        let path = Path::new("relative/path");
+        let result = expand_tilde(path);
+        assert_eq!(result, PathBuf::from("relative/path"));
+    }
+}
