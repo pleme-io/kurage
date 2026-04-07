@@ -82,3 +82,92 @@ impl KurageConfig {
         Self::default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_values() {
+        let config = KurageConfig::default();
+        assert_eq!(config.api_url, "https://api.cursor.com");
+        assert_eq!(config.default_model, "claude-4.6-opus-high-thinking");
+        assert_eq!(config.output, OutputFormat::Pretty);
+        assert_eq!(config.poll_interval, 5);
+        assert!(config
+            .api_key_file
+            .to_string_lossy()
+            .ends_with(".config/cursor/api-key"));
+    }
+
+    #[test]
+    fn deserialize_full_yaml() {
+        let yaml = r"
+api_url: https://custom.example.com
+api_key_file: /etc/cursor/key
+default_model: gpt-4o
+output: json
+poll_interval: 10
+";
+        let config: KurageConfig = serde_yaml_ng::from_str(yaml).unwrap();
+        assert_eq!(config.api_url, "https://custom.example.com");
+        assert_eq!(config.api_key_file, PathBuf::from("/etc/cursor/key"));
+        assert_eq!(config.default_model, "gpt-4o");
+        assert_eq!(config.output, OutputFormat::Json);
+        assert_eq!(config.poll_interval, 10);
+    }
+
+    #[test]
+    fn deserialize_partial_yaml_uses_defaults() {
+        let yaml = "output: table\n";
+        let config: KurageConfig = serde_yaml_ng::from_str(yaml).unwrap();
+        assert_eq!(config.output, OutputFormat::Table);
+        assert_eq!(config.api_url, "https://api.cursor.com");
+        assert_eq!(config.poll_interval, 5);
+    }
+
+    #[test]
+    fn deserialize_empty_yaml_is_default() {
+        let yaml = "{}";
+        let config: KurageConfig = serde_yaml_ng::from_str(yaml).unwrap();
+        assert_eq!(config.api_url, "https://api.cursor.com");
+        assert_eq!(config.output, OutputFormat::Pretty);
+    }
+
+    #[test]
+    fn output_format_all_variants() {
+        for (s, expected) in [
+            ("\"json\"", OutputFormat::Json),
+            ("\"pretty\"", OutputFormat::Pretty),
+            ("\"table\"", OutputFormat::Table),
+        ] {
+            let fmt: OutputFormat = serde_json::from_str(s).unwrap();
+            assert_eq!(fmt, expected);
+        }
+    }
+
+    #[test]
+    fn load_from_kurage_config_env() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        std::io::Write::write_all(
+            &mut tmp,
+            b"api_url: https://test.example.com\npoll_interval: 99\n",
+        )
+        .unwrap();
+        // SAFETY: test binary is single-threaded for this env var
+        unsafe { std::env::set_var("KURAGE_CONFIG", tmp.path().as_os_str()) };
+        let config = KurageConfig::load();
+        unsafe { std::env::remove_var("KURAGE_CONFIG") };
+        assert_eq!(config.api_url, "https://test.example.com");
+        assert_eq!(config.poll_interval, 99);
+    }
+
+    #[test]
+    fn load_falls_back_to_default() {
+        // SAFETY: test binary is single-threaded for this env var
+        unsafe { std::env::set_var("KURAGE_CONFIG", "/dev/null") };
+        let config = KurageConfig::load();
+        unsafe { std::env::remove_var("KURAGE_CONFIG") };
+        assert_eq!(config.api_url, "https://api.cursor.com");
+    }
+}
