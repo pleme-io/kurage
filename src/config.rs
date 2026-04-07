@@ -2,21 +2,31 @@ use serde::Deserialize;
 use shikumi::{ConfigDiscovery, Format};
 use std::path::PathBuf;
 
+/// Kurage configuration loaded from YAML config or defaults.
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct KurageConfig {
+    /// Base URL for the Cursor Cloud Agents API.
     pub api_url: String,
+    /// Path to file containing the Cursor API key.
     pub api_key_file: PathBuf,
+    /// Default model ID to use when launching agents.
     pub default_model: String,
+    /// CLI output format.
     pub output: OutputFormat,
+    /// Seconds between polls for `--follow` modes.
     pub poll_interval: u64,
 }
 
+/// CLI output format selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
+    /// Emit raw JSON.
     Json,
+    /// Human-readable formatted text.
     Pretty,
+    /// Tabular output using `comfy-table`.
     Table,
 }
 

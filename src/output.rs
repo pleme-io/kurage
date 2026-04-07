@@ -3,10 +3,12 @@ use crate::config::OutputFormat;
 use crate::format;
 use comfy_table::{Table, presets::UTF8_FULL_CONDENSED};
 
+/// Serialize any value as pretty-printed JSON to stdout.
 pub fn print_json<T: serde::Serialize>(value: &T) {
     println!("{}", serde_json::to_string_pretty(value).unwrap_or_default());
 }
 
+/// Print a single agent in the selected output format.
 pub fn print_agent(agent: &Agent, fmt: OutputFormat) {
     match fmt {
         OutputFormat::Json => print_json(agent),
@@ -14,6 +16,7 @@ pub fn print_agent(agent: &Agent, fmt: OutputFormat) {
     }
 }
 
+/// Print an agent list in the selected output format.
 pub fn print_agent_list(list: &AgentList, fmt: OutputFormat) {
     match fmt {
         OutputFormat::Json => print_json(list),
@@ -40,6 +43,7 @@ pub fn print_agent_list(list: &AgentList, fmt: OutputFormat) {
     }
 }
 
+/// Print a conversation in the selected output format.
 pub fn print_conversation(conv: &Conversation, fmt: OutputFormat) {
     match fmt {
         OutputFormat::Json => print_json(conv),
@@ -47,6 +51,7 @@ pub fn print_conversation(conv: &Conversation, fmt: OutputFormat) {
     }
 }
 
+/// Print a model list in the selected output format.
 pub fn print_models(list: &ModelList, fmt: OutputFormat) {
     match fmt {
         OutputFormat::Json => print_json(list),
@@ -54,6 +59,7 @@ pub fn print_models(list: &ModelList, fmt: OutputFormat) {
     }
 }
 
+/// Print a repository list in the selected output format.
 pub fn print_repos(list: &RepoList, fmt: OutputFormat) {
     match fmt {
         OutputFormat::Json => print_json(list),
@@ -61,6 +67,7 @@ pub fn print_repos(list: &RepoList, fmt: OutputFormat) {
     }
 }
 
+/// Print an artifact list in the selected output format.
 pub fn print_artifacts(list: &ArtifactList, fmt: OutputFormat) {
     match fmt {
         OutputFormat::Json => print_json(list),
@@ -68,6 +75,7 @@ pub fn print_artifacts(list: &ArtifactList, fmt: OutputFormat) {
     }
 }
 
+/// Print API key / user info in the selected output format.
 pub fn print_me(resp: &MeResponse, fmt: OutputFormat) {
     match fmt {
         OutputFormat::Json => print_json(resp),

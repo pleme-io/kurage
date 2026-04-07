@@ -1,6 +1,7 @@
 use crate::api::types::{Agent, AgentList, ArtifactList, Conversation, MeResponse, MessageType, ModelList, RepoList};
 use std::fmt::Write;
 
+/// Truncate a string to `max` characters, appending `...` if shortened.
 pub fn truncate(s: &str, max: usize) -> String {
     if s.len() > max {
         format!("{}...", &s[..max.saturating_sub(3)])
@@ -9,6 +10,7 @@ pub fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+/// Render a single agent as human-readable multi-line text.
 pub fn format_agent(agent: &Agent) -> String {
     let mut out = String::with_capacity(512);
     let _ = writeln!(out, "ID:      {}", agent.id);
@@ -40,6 +42,7 @@ pub fn format_agent(agent: &Agent) -> String {
     out
 }
 
+/// Render an agent list as a summary table with optional pagination cursor.
 pub fn format_agent_list(list: &AgentList) -> String {
     if list.agents.is_empty() {
         return "No agents found.".into();
@@ -59,6 +62,7 @@ pub fn format_agent_list(list: &AgentList) -> String {
     out
 }
 
+/// Render a conversation as role-prefixed message blocks.
 pub fn format_conversation(conv: &Conversation) -> String {
     if conv.messages.is_empty() {
         return "No messages yet.".into();
@@ -77,6 +81,7 @@ pub fn format_conversation(conv: &Conversation) -> String {
     out
 }
 
+/// Render a model list as one model ID per line.
 pub fn format_models(list: &ModelList) -> String {
     let mut out = String::new();
     for m in &list.models {
@@ -85,6 +90,7 @@ pub fn format_models(list: &ModelList) -> String {
     out
 }
 
+/// Render a repository list as `owner/name: url` lines.
 pub fn format_repos(list: &RepoList) -> String {
     let mut out = String::new();
     for r in &list.repositories {
@@ -93,6 +99,7 @@ pub fn format_repos(list: &RepoList) -> String {
     out
 }
 
+/// Render an artifact list as `path (size, updated)` lines.
 pub fn format_artifacts(list: &ArtifactList) -> String {
     if list.artifacts.is_empty() {
         return "No artifacts.".into();
@@ -104,6 +111,7 @@ pub fn format_artifacts(list: &ArtifactList) -> String {
     out
 }
 
+/// Render API key / user info from the `/v0/me` endpoint.
 pub fn format_me(resp: &MeResponse) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "API Key: {}", resp.api_key_name);
