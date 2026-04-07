@@ -17,3 +17,28 @@ pub enum KurageError {
 
 /// Convenience alias used throughout the crate.
 pub type Result<T> = std::result::Result<T, KurageError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_api_key_error_display() {
+        let err = KurageError::NoApiKey {
+            path: PathBuf::from("/home/user/.config/cursor/api-key"),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("API key not found"));
+        assert!(msg.contains("/home/user/.config/cursor/api-key"));
+        assert!(msg.contains("CURSOR_API_KEY"));
+    }
+
+    #[test]
+    fn no_api_key_debug() {
+        let err = KurageError::NoApiKey {
+            path: PathBuf::from("/tmp/key"),
+        };
+        let debug = format!("{err:?}");
+        assert!(debug.contains("NoApiKey"));
+    }
+}

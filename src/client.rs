@@ -47,14 +47,7 @@ impl CursorCloudClient {
         cursor: Option<&str>,
         pr_url: Option<&str>,
     ) -> Result<AgentList> {
-        use std::fmt::Write;
-        let mut path = format!("/v0/agents?limit={limit}");
-        if let Some(c) = cursor {
-            let _ = write!(path, "&cursor={}", urlencoding::encode(c));
-        }
-        if let Some(pr) = pr_url {
-            let _ = write!(path, "&prUrl={}", urlencoding::encode(pr));
-        }
+        let path = build_list_path(limit, cursor, pr_url);
         Ok(self.http.get(&path).await?)
     }
 
@@ -94,13 +87,8 @@ impl CursorCloudClient {
         id: &str,
         path: &str,
     ) -> Result<GetArtifactResponse> {
-        Ok(self
-            .http
-            .get(&format!(
-                "/v0/agents/{id}/artifacts/download?path={}",
-                urlencoding::encode(path)
-            ))
-            .await?)
+        let url = build_download_path(id, path);
+        Ok(self.http.get(&url).await?)
     }
 
     /// GET /v0/models — List available models.
@@ -116,5 +104,90 @@ impl CursorCloudClient {
     /// GET /v0/me — Get API key information.
     pub async fn me(&self) -> Result<MeResponse> {
         Ok(self.http.get("/v0/me").await?)
+    }
+}
+
+/// Build the query-string path for the list-agents endpoint.
+fn build_list_path(limit: u32, cursor: Option<&str>, pr_url: Option<&str>) -> String {
+    use std::fmt::Write;
+    let mut path = format!("/v0/agents?limit={limit}");
+    if let Some(c) = cursor {
+        let _ = write!(path, "&cursor={}", urlencoding::encode(c));
+    }
+    if let Some(pr) = pr_url {
+        let _ = write!(path, "&prUrl={}", urlencoding::encode(pr));
+    }
+    path
+}
+
+/// Build the query-string path for the download-artifact endpoint.
+fn build_download_path(id: &str, artifact_path: &str) -> String {
+    format!(
+        "/v0/agents/{id}/artifacts/download?path={}",
+        urlencoding::encode(artifact_path)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_list_path_limit_only() {
+        let path = build_list_path(20, None, None);
+        assert_eq!(path, "/v0/agents?limit=20");
+    }
+
+    #[test]
+    fn build_list_path_with_cursor() {
+        let path = build_list_path(10, Some("abc123"), None);
+        assert_eq!(path, "/v0/agents?limit=10&cursor=abc123");
+    }
+
+    #[test]
+    fn build_list_path_with_pr_url() {
+        let path = build_list_path(5, None, Some("https://github.com/org/repo/pull/1"));
+        assert!(path.starts_with("/v0/agents?limit=5&prUrl="));
+        assert!(path.contains("https%3A%2F%2Fgithub.com"));
+    }
+
+    #[test]
+    fn build_list_path_with_all_params() {
+        let path = build_list_path(
+            50,
+            Some("cur_xyz"),
+            Some("https://github.com/org/repo/pull/42"),
+        );
+        assert!(path.starts_with("/v0/agents?limit=50"));
+        assert!(path.contains("&cursor=cur_xyz"));
+        assert!(path.contains("&prUrl="));
+    }
+
+    #[test]
+    fn build_list_path_cursor_url_encoded() {
+        let path = build_list_path(20, Some("a b&c=d"), None);
+        assert!(path.contains("cursor=a%20b%26c%3Dd"));
+    }
+
+    #[test]
+    fn build_download_path_basic() {
+        let path = build_download_path("bc_123", "/opt/cursor/artifacts/file.txt");
+        assert_eq!(
+            path,
+            "/v0/agents/bc_123/artifacts/download?path=%2Fopt%2Fcursor%2Fartifacts%2Ffile.txt"
+        );
+    }
+
+    #[test]
+    fn build_download_path_special_chars() {
+        let path = build_download_path("bc_1", "/path/with spaces/file (1).txt");
+        assert!(path.contains("path="));
+        assert!(path.contains("%20"));
+    }
+
+    #[test]
+    fn client_debug_impl() {
+        let debug = format!("{:?}", CursorCloudClient::new("https://example.com", "key").unwrap());
+        assert!(debug.contains("CursorCloudClient"));
     }
 }

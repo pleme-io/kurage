@@ -95,6 +95,25 @@ fn parse_output_format(s: &str) -> Option<OutputFormat> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_output_format_known_values() {
+        assert_eq!(parse_output_format("json"), Some(OutputFormat::Json));
+        assert_eq!(parse_output_format("pretty"), Some(OutputFormat::Pretty));
+        assert_eq!(parse_output_format("table"), Some(OutputFormat::Table));
+    }
+
+    #[test]
+    fn parse_output_format_unknown_returns_none() {
+        assert_eq!(parse_output_format("csv"), None);
+        assert_eq!(parse_output_format(""), None);
+        assert_eq!(parse_output_format("JSON"), None);
+    }
+}
+
 fn init_tracing(json: bool) {
     use tracing_subscriber::{EnvFilter, fmt};
 
